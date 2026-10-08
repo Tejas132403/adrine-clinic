@@ -16,7 +16,8 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force",
     "db:info": "tsx scripts/db-info.ts",
-    "verify": "tsx scripts/verify-api.ts"
+    "verify": "tsx scripts/verify-api.ts",
+    "test:flows": "tsx scripts/test-all-flows.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
