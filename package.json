@@ -5,8 +5,8 @@
   "description": "Outpatient clinic management application for reception staff and doctors",
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
-    "start": "next start -p 3000",
+    "build": "prisma generate && next build",
+    "start": "next start",
     "typecheck": "tsc --noEmit",
     "db:up": "tsx scripts/dev-db.ts",
     "db:migrate": "prisma migrate dev",
