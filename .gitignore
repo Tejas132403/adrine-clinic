@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# environment
+.env
+.env.local
+.env*.local
+
+# local embedded PostgreSQL cluster (created by `npm run db:up`)
+.pgdata/
+pg-logs/
+
+# logs / editors / os
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# verification artefacts
+*.log
+.freebuff/

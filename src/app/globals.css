@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-surface-subtle text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Consistent, accessible focus treatment for every interactive element. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500/40 ring-offset-1 ring-offset-white;
+  }
+
+  /* Tabular figures keep appointment times and counts aligned in tables. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full border-[3px] border-solid border-transparent bg-slate-300 bg-clip-content;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400 bg-clip-content;
+  }
+}
+
+@layer components {
+  .label-field {
+    @apply block text-[13px] font-medium text-slate-700;
+  }
+
+  .field-error {
+    @apply mt-1 flex items-start gap-1 text-xs font-medium text-rose-600;
+  }
+
+  .table-head-cell {
+    @apply whitespace-nowrap px-4 py-2.5 text-left text-2xs font-semibold uppercase tracking-wider text-ink-soft;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm text-slate-700 align-middle;
+  }
+}

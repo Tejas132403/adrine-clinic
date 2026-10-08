@@ -1,0 +1,141 @@
+// Clinic Management - PostgreSQL schema (Prisma)
+// ---------------------------------------------------------------------------
+// Design notes (see README "Database design"):
+//  - `appointmentDate` is a DATE column and times are clinic-local "HH:mm"
+//    strings. A clinic schedules in wall-clock time, so this keeps conflict
+//    detection exact and avoids client timezone drift.
+//  - Appointment/ClinicalNote -> Doctor/Patient use Restrict, so clinical
+//    history can never be silently destroyed by removing a parent row.
+//  - Composite indexes are ordered to match the real access patterns:
+//    doctor day view + conflict detection, patient history, status filters.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  RECEPTIONIST
+  DOCTOR
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  doctor Doctor?
+
+  @@index([role])
+  @@map("users")
+}
+
+model Doctor {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  specialization String
+  phone          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments  Appointment[]
+  clinicalNotes ClinicalNote[]
+
+  @@index([specialization])
+  @@map("doctors")
+}
+
+model Patient {
+  id          String        @id @default(uuid())
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime      @db.Date
+  gender      Gender
+  phone       String
+  email       String?
+  address     String?
+  status      PatientStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  appointments  Appointment[]
+  clinicalNotes ClinicalNote[]
+
+  @@index([lastName, firstName])
+  @@index([status])
+  @@index([phone])
+  @@index([createdAt])
+  @@map("patients")
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  patientId       String
+  doctorId        String
+  appointmentDate DateTime          @db.Date
+  startTime       String            @db.VarChar(5)
+  endTime         String            @db.VarChar(5)
+  status          AppointmentStatus @default(SCHEDULED)
+  reason          String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor        Doctor         @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  clinicalNotes ClinicalNote[]
+
+  // Doctor day view + overlap (conflict) detection.
+  @@index([doctorId, appointmentDate, startTime])
+  // Reception filters: date, status, doctor.
+  @@index([appointmentDate, status, startTime])
+  @@index([status])
+  // Patient appointment history.
+  @@index([patientId, appointmentDate])
+  @@map("appointments")
+}
+
+model ClinicalNote {
+  id            String   @id @default(uuid())
+  patientId     String
+  doctorId      String
+  appointmentId String
+  note          String   @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  patient     Patient     @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor      Doctor      @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+
+  @@index([patientId, createdAt])
+  @@index([doctorId, createdAt])
+  @@index([appointmentId])
+  @@map("clinical_notes")
+}
