@@ -69,6 +69,9 @@ async function run() {
   console.log("Testing Roles: RECEPTIONIST, DOCTOR, SECURITY GUARDRAILS, FRONTEND PAGES");
   console.log("================================================================================\n");
 
+  const cleanupAppointments: string[] = [];
+  let cleanupPatientId: string | null = null;
+
   // ---------------------------------------------------------------------------
   // 1. FRONTEND SERVER ACCESSIBILITY
   // ---------------------------------------------------------------------------
@@ -192,6 +195,7 @@ async function run() {
   let createdPatientId = "";
   if (createPatient.status === 201 && createPatient.body.data?.id) {
     createdPatientId = createPatient.body.data.id;
+    cleanupPatientId = createdPatientId;
     record("Register new patient", "RECEPTIONIST", "PASS", `Patient ID: ${createdPatientId} (${newPatientPayload.firstName} ${newPatientPayload.lastName})`);
   } else {
     record("Register new patient", "RECEPTIONIST", "FAIL", `Status ${createPatient.status}: ${JSON.stringify(createPatient.body)}`);
@@ -255,6 +259,24 @@ async function run() {
 
   const todayStr = getTodayString();
 
+  // Find free available slots for today
+  const availRes = await api("GET", `/appointments/availability?doctorId=${doctor.id}&date=${todayStr}`, { token: recToken });
+  const bookedSlots = new Set((availRes.body.data ?? []).map((s: any) => s.startTime));
+  const candidateSlots = ["15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30"];
+  const freeSlots = candidateSlots.filter((slot) => !bookedSlots.has(slot));
+
+  const slotA = freeSlots[0] || "17:00";
+  const slotB = freeSlots[1] || "17:30";
+  const slotC = freeSlots[2] || "18:00";
+
+  const getEndSlot = (start: string) => {
+    const [h, m] = start.split(":").map(Number);
+    const total = h * 60 + m + 30;
+    const eh = Math.floor(total / 60);
+    const em = total % 60;
+    return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+  };
+
   // Test: Reject booking when end time is before start time
   const badTimeAppt = await api("POST", "/appointments", {
     token: recToken,
@@ -273,41 +295,47 @@ async function run() {
     record("Reject booking with end time before start time", "SECURITY", "FAIL", `Expected 400, got ${badTimeAppt.status}`);
   }
 
-  // Test: Successfully book slot 17:00 - 17:30
+  // Test: Successfully book slot A
+  const endA = getEndSlot(slotA);
   const appt1 = await api("POST", "/appointments", {
     token: recToken,
     body: {
       patientId: createdPatientId,
       doctorId: doctor.id,
       appointmentDate: todayStr,
-      startTime: "17:00",
-      endTime: "17:30",
+      startTime: slotA,
+      endTime: endA,
       reason: "Initial medical consultation",
     }
   });
   let appt1Id = "";
   if (appt1.status === 201 && appt1.body.data?.id) {
     appt1Id = appt1.body.data.id;
-    record("Book initial appointment (17:00 - 17:30)", "RECEPTIONIST", "PASS", `Appt ID: ${appt1Id}`);
+    cleanupAppointments.push(appt1Id);
+    record(`Book initial appointment (${slotA} - ${endA})`, "RECEPTIONIST", "PASS", `Appt ID: ${appt1Id}`);
   } else {
-    record("Book initial appointment (17:00 - 17:30)", "RECEPTIONIST", "FAIL", `Status ${appt1.status}: ${JSON.stringify(appt1.body)}`);
+    record(`Book initial appointment (${slotA} - ${endA})`, "RECEPTIONIST", "FAIL", `Status ${appt1.status}: ${JSON.stringify(appt1.body)}`);
   }
 
-  // Test: Overlapping conflict detection (17:15 - 17:45)
+  // Test: Overlapping conflict detection
+  const [ah, am] = slotA.split(":").map(Number);
+  const overlapStart = `${String(ah).padStart(2, "0")}:${String(am + 15).padStart(2, "0")}`;
+  const overlapEnd = `${String(ah).padStart(2, "0")}:${String(am + 45).padStart(2, "0")}`;
+
   const conflictAppt = await api("POST", "/appointments", {
     token: recToken,
     body: {
       patientId: createdPatientId,
       doctorId: doctor.id,
       appointmentDate: todayStr,
-      startTime: "17:15",
-      endTime: "17:45",
+      startTime: overlapStart,
+      endTime: overlapEnd,
       reason: "Conflicting slot test",
     }
   });
   if (conflictAppt.status === 409 && conflictAppt.body.message?.includes("already has an appointment")) {
     record(
-      "Detect and reject overlapping appointment conflict (17:15 - 17:45)",
+      `Detect and reject overlapping appointment conflict (${overlapStart} - ${overlapEnd})`,
       "SECURITY",
       "PASS",
       `HTTP 409: "${conflictAppt.body.message}"`
@@ -316,35 +344,37 @@ async function run() {
     record("Detect and reject overlapping appointment conflict", "SECURITY", "FAIL", `Expected 409 with message, got ${conflictAppt.status}`);
   }
 
-  // Test: Allow back-to-back appointment (17:30 - 18:00)
+  // Test: Allow back-to-back appointment (slot B)
+  const endB = getEndSlot(slotB);
   const b2bAppt = await api("POST", "/appointments", {
     token: recToken,
     body: {
       patientId: createdPatientId,
       doctorId: doctor.id,
       appointmentDate: todayStr,
-      startTime: "17:30",
-      endTime: "18:00",
+      startTime: slotB,
+      endTime: endB,
       reason: "Follow-up consultation",
     }
   });
   let b2bApptId = "";
   if (b2bAppt.status === 201 && b2bAppt.body.data?.id) {
     b2bApptId = b2bAppt.body.data.id;
-    record("Allow back-to-back non-overlapping slot (17:30 - 18:00)", "RECEPTIONIST", "PASS", "Slot accepted without conflict");
+    cleanupAppointments.push(b2bApptId);
+    record(`Allow back-to-back non-overlapping slot (${slotB} - ${endB})`, "RECEPTIONIST", "PASS", "Slot accepted without conflict");
   } else {
     record("Allow back-to-back non-overlapping slot", "RECEPTIONIST", "FAIL", `Status ${b2bAppt.status}`);
   }
 
-  // Reschedule b2bAppt into a conflicted slot (attempt 17:00)
+  // Reschedule b2bAppt into a conflicted slot (attempt slotA overlap)
   const badReschedule = await api("PUT", `/appointments/${b2bApptId}`, {
     token: recToken,
     body: {
       patientId: createdPatientId,
       doctorId: doctor.id,
       appointmentDate: todayStr,
-      startTime: "17:10",
-      endTime: "17:40",
+      startTime: overlapStart,
+      endTime: overlapEnd,
       reason: "Reschedule into conflict",
     }
   });
@@ -373,12 +403,14 @@ async function run() {
     record("Reject completing a cancelled appointment", "SECURITY", "FAIL", `Expected 409, got ${completeCancelled.status}`);
   }
 
-  // Mark appt1 as completed
-  const completeAppt = await api("PATCH", `/appointments/${appt1Id}/complete`, { token: recToken });
-  if (completeAppt.status === 200 && completeAppt.body.data?.status === "COMPLETED") {
-    record("Mark appointment as COMPLETED", "RECEPTIONIST", "PASS", "Status updated to COMPLETED");
-  } else {
-    record("Mark appointment as COMPLETED", "RECEPTIONIST", "FAIL", `Status ${completeAppt.status}`);
+  // Mark appt1 as completed by Receptionist
+  if (appt1Id) {
+    const completeAppt = await api("PATCH", `/appointments/${appt1Id}/complete`, { token: recToken });
+    if (completeAppt.status === 200 && completeAppt.body.data?.status === "COMPLETED") {
+      record("Receptionist marks appointment as COMPLETED", "RECEPTIONIST", "PASS", "Status updated to COMPLETED");
+    } else {
+      record("Receptionist marks appointment as COMPLETED", "RECEPTIONIST", "FAIL", `Status ${completeAppt.status}`);
+    }
   }
 
   // Receptionist attempts to add a clinical note (Forbidden)
@@ -432,6 +464,56 @@ async function run() {
     record("Doctor can view patient with an appointment with them", "DOCTOR", "FAIL", "Patient not visible");
   }
 
+  // Doctor can complete their own appointment
+  const endC = getEndSlot(slotC);
+  const docCanCompleteOwn = await api("POST", "/appointments", {
+    token: recToken,
+    body: {
+      patientId: createdPatientId,
+      doctorId: doctor.id,
+      appointmentDate: todayStr,
+      startTime: slotC,
+      endTime: endC,
+      reason: "Consultation to be completed by doctor",
+    }
+  });
+  const docApptToCompleteId = docCanCompleteOwn.body.data?.id;
+  if (docApptToCompleteId) {
+    cleanupAppointments.push(docApptToCompleteId);
+    const docCompleteRes = await api("PATCH", `/appointments/${docApptToCompleteId}/complete`, { token: docToken });
+    if (docCompleteRes.status === 200 && docCompleteRes.body.data?.status === "COMPLETED") {
+      record("Doctor marks own appointment as COMPLETED (tic schedule)", "DOCTOR", "PASS", "Doctor completed visit successfully");
+    } else {
+      record("Doctor marks own appointment as COMPLETED (tic schedule)", "DOCTOR", "FAIL", `Status ${docCompleteRes.status}`);
+    }
+  }
+
+  // Doctor CANNOT complete another doctor's appointment
+  const otherDoctor = docList.body.data?.find((d: any) => d.email !== "doctor@clinic.com");
+  if (otherDoctor) {
+    const otherApptRes = await api("POST", "/appointments", {
+      token: recToken,
+      body: {
+        patientId: createdPatientId,
+        doctorId: otherDoctor.id,
+        appointmentDate: todayStr,
+        startTime: slotC,
+        endTime: endC,
+        reason: "Visit for another doctor",
+      }
+    });
+    const otherApptId = otherApptRes.body.data?.id;
+    if (otherApptId) {
+      cleanupAppointments.push(otherApptId);
+      const docTryCompleteOther = await api("PATCH", `/appointments/${otherApptId}/complete`, { token: docToken });
+      if (docTryCompleteOther.status === 403) {
+        record("Doctor BLOCKED from completing another doctor's appointment", "SECURITY", "PASS", "HTTP 403 Forbidden");
+      } else {
+        record("Doctor BLOCKED from completing another doctor's appointment", "SECURITY", "FAIL", `Expected 403, got ${docTryCompleteOther.status}`);
+      }
+    }
+  }
+
   // Doctor CANNOT see patients who have appointments only with other doctors
   const meeraDoc = docList.body.data?.find((d: any) => d.email === "meera.iyer@clinic.com");
   if (meeraDoc) {
@@ -478,10 +560,11 @@ async function run() {
 
   // Doctor writes clinical note on their completed appointment
   const clinicalNoteText = "Patient presented for routine evaluation. Vital signs normal (BP 120/80, Pulse 72). Advised annual blood screening and lifestyle maintenance.";
+  const noteTargetApptId = appt1Id || docApptToCompleteId;
   const addNote = await api("POST", `/patients/${createdPatientId}/notes`, {
     token: docToken,
     body: {
-      appointmentId: appt1Id,
+      appointmentId: noteTargetApptId,
       note: clinicalNoteText,
     }
   });
@@ -519,7 +602,7 @@ async function run() {
 
   const docCreateAppt = await api("POST", "/appointments", {
     token: docToken,
-    body: { patientId: createdPatientId, doctorId: doctor.id, appointmentDate: todayStr, startTime: "18:00", endTime: "18:30", reason: "Doc booking" }
+    body: { patientId: createdPatientId, doctorId: doctor.id, appointmentDate: todayStr, startTime: "19:00", endTime: "19:30", reason: "Doc booking" }
   });
   if (docCreateAppt.status === 403) {
     record("Doctor blocked from booking appointments", "SECURITY", "PASS", "HTTP 403 Forbidden");
@@ -534,6 +617,13 @@ async function run() {
     record("Receptionist can view clinical note in patient profile", "RECEPTIONIST", "PASS", "Read-only access granted");
   } else {
     record("Receptionist can view clinical note in patient profile", "RECEPTIONIST", "FAIL", "Note missing for reception");
+  }
+
+  // ---------------------------------------------------------------------------
+  // CLEANUP
+  // ---------------------------------------------------------------------------
+  for (const id of cleanupAppointments) {
+    await api("PATCH", `/appointments/${id}/cancel`, { token: recToken }).catch(() => {});
   }
 
   // ---------------------------------------------------------------------------

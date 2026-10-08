@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { AppointmentTable } from "@/components/appointments/AppointmentTable";
 import { AppointmentDetailsDialog } from "@/components/appointments/AppointmentDetailsDialog";
 import { AppointmentFormDialog } from "@/components/appointments/AppointmentFormDialog";
+import { ClinicalNoteDialog } from "@/components/patients/ClinicalNoteDialog";
 import { ALL_DATES, AppointmentFilters, TODAY } from "@/components/appointments/AppointmentFilters";
 import { messageOf } from "@/utils/apiErrors";
 import type { AppointmentItem, AppointmentStatus, DoctorSummary } from "@/types";
@@ -43,6 +44,9 @@ export default function AppointmentsPage() {
   const [cancelTarget, setCancelTarget] = useState<AppointmentItem | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [noteAppointment, setNoteAppointment] = useState<AppointmentItem | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 350);
   const { data: doctors } = useApiResource(() => doctorService.list(), [user.id]);
@@ -107,7 +111,10 @@ export default function AppointmentsPage() {
       setBusyId(appointment.id);
       try {
         await appointmentService.complete(appointment.id);
-        toast.success("Appointment marked as completed", `${appointment.patient.firstName} ${appointment.patient.lastName} · ${formatDate(appointment.appointmentDate)}`);
+        toast.success(
+          "Appointment marked as completed",
+          `${appointment.patient.firstName} ${appointment.patient.lastName} · ${formatDate(appointment.appointmentDate)}`,
+        );
         await reload();
       } catch (caught) {
         toast.error("Unable to complete this appointment", messageOf(caught, "Please try again."));
@@ -145,6 +152,13 @@ export default function AppointmentsPage() {
     setDetailsOpen(true);
   }, []);
 
+  const handleOpenNote = useCallback((appointment: AppointmentItem) => {
+    setSelected(null);
+    setDetailsOpen(false);
+    setNoteAppointment(appointment);
+    setNoteOpen(true);
+  }, []);
+
   const dateLabel = dateFilter === TODAY ? "today" : dateFilter === ALL_DATES ? "across all dates" : `on ${formatDate(dateFilter)}`;
 
   return (
@@ -165,7 +179,7 @@ export default function AppointmentsPage() {
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-ink-muted">
               <Clock className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
-              Read-only schedule
+              Doctor Schedule
             </span>
           )
         }
@@ -199,7 +213,8 @@ export default function AppointmentsPage() {
             onView={openDetails}
             onReschedule={isReceptionist ? openReschedule : undefined}
             onCancel={isReceptionist ? setCancelTarget : undefined}
-            onComplete={isReceptionist ? (appointment) => void handleComplete(appointment) : undefined}
+            onComplete={(appointment) => void handleComplete(appointment)}
+            onAddNote={handleOpenNote}
             emptyState={
               <EmptyState
                 icon={CalendarDays}
@@ -252,6 +267,7 @@ export default function AppointmentsPage() {
         }}
         onCancel={setCancelTarget}
         onComplete={(appointment) => void handleComplete(appointment)}
+        onAddNote={handleOpenNote}
       />
 
       <AppointmentFormDialog
@@ -266,6 +282,25 @@ export default function AppointmentsPage() {
         }}
         onSaved={() => void reload()}
       />
+
+      {noteAppointment ? (
+        <ClinicalNoteDialog
+          open={noteOpen}
+          patientId={noteAppointment.patient.id}
+          patientName={`${noteAppointment.patient.firstName} ${noteAppointment.patient.lastName}`}
+          appointments={[noteAppointment]}
+          onClose={() => {
+            setNoteOpen(false);
+            setNoteAppointment(null);
+          }}
+          onSaved={async () => {
+            setNoteOpen(false);
+            setNoteAppointment(null);
+            toast.success("Clinical note recorded", "Your medical note has been saved.");
+            await reload();
+          }}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(cancelTarget)}

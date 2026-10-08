@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, CheckCircle2, XCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, FileHeart, XCircle } from "lucide-react";
 import type { AppointmentItem } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { AppointmentStatusBadge, PatientStatusBadge } from "@/components/ui/Badge";
@@ -17,6 +18,7 @@ export function AppointmentDetailsDialog({
   onReschedule,
   onCancel,
   onComplete,
+  onAddNote,
 }: {
   appointment: AppointmentItem | null;
   open: boolean;
@@ -25,10 +27,17 @@ export function AppointmentDetailsDialog({
   onReschedule?: (appointment: AppointmentItem) => void;
   onCancel?: (appointment: AppointmentItem) => void;
   onComplete?: (appointment: AppointmentItem) => void;
+  onAddNote?: (appointment: AppointmentItem) => void;
 }) {
+  const { user, isDoctor } = useAuth();
+
   if (!appointment) return null;
 
-  const canAct = canManage && appointment.status === "SCHEDULED";
+  const isDoctorAppointment = isDoctor && appointment.doctor.id === user?.doctorId;
+  const canComplete = (canManage || isDoctorAppointment) && appointment.status === "SCHEDULED";
+  const canAddClinicalNote = isDoctorAppointment && appointment.status !== "CANCELLED";
+  const canReschedule = canManage && appointment.status === "SCHEDULED";
+  const canCancel = canManage && appointment.status === "SCHEDULED";
   const dismiss = () => onClose();
 
   return (
@@ -43,7 +52,19 @@ export function AppointmentDetailsDialog({
           <Button variant="secondary" onClick={dismiss}>
             Close
           </Button>
-          {canAct && onReschedule ? (
+          {canAddClinicalNote && onAddNote ? (
+            <Button
+              variant="secondary"
+              icon={<FileHeart className="h-3.5 w-3.5 text-brand-600" />}
+              onClick={() => {
+                dismiss();
+                onAddNote(appointment);
+              }}
+            >
+              Add clinical note
+            </Button>
+          ) : null}
+          {canReschedule && onReschedule ? (
             <Button
               variant="secondary"
               icon={<CalendarClock className="h-3.5 w-3.5" />}
@@ -55,7 +76,7 @@ export function AppointmentDetailsDialog({
               Reschedule
             </Button>
           ) : null}
-          {canAct && onComplete ? (
+          {canComplete && onComplete ? (
             <Button
               icon={<CheckCircle2 className="h-3.5 w-3.5" />}
               onClick={() => {
@@ -66,7 +87,7 @@ export function AppointmentDetailsDialog({
               Mark completed
             </Button>
           ) : null}
-          {canAct && onCancel ? (
+          {canCancel && onCancel ? (
             <Button
               variant="dangerGhost"
               icon={<XCircle className="h-3.5 w-3.5" />}

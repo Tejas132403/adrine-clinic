@@ -10,5 +10,5 @@ export const PATCH = authRoute<Params>(
     const appointment = await completeAppointment(auth, uuidSchema.parse(params.id));
     return jsonOk(appointment);
   },
-  { roles: ["RECEPTIONIST"] },
+  { roles: ["RECEPTIONIST", "DOCTOR"] },
 );

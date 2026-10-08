@@ -12,8 +12,9 @@ import {
   Users,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 import { useApiResource } from "@/hooks/useApiResource";
-import { dashboardService } from "@/services/clinic.service";
+import { appointmentService, dashboardService } from "@/services/clinic.service";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -24,6 +25,8 @@ import { NextAppointmentCard } from "@/components/dashboard/NextAppointmentCard"
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { AppointmentTable } from "@/components/appointments/AppointmentTable";
 import { AppointmentDetailsDialog } from "@/components/appointments/AppointmentDetailsDialog";
+import { ClinicalNoteDialog } from "@/components/patients/ClinicalNoteDialog";
+import { messageOf } from "@/utils/apiErrors";
 import type { AppointmentItem } from "@/types";
 
 function greeting(): string {
@@ -35,8 +38,12 @@ function greeting(): string {
 
 export default function DashboardPage() {
   const { user, isDoctor, isReceptionist } = useAuth();
+  const toast = useToast();
   const [selected, setSelected] = useState<AppointmentItem | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [noteAppointment, setNoteAppointment] = useState<AppointmentItem | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
 
   const { data: stats, loading, error, reload } = useApiResource(
     () => dashboardService.stats(),
@@ -46,6 +53,30 @@ export default function DashboardPage() {
   const openDetails = useCallback((appointment: AppointmentItem) => {
     setSelected(appointment);
     setDetailsOpen(true);
+  }, []);
+
+  const handleComplete = useCallback(
+    async (appointment: AppointmentItem) => {
+      setBusyId(appointment.id);
+      try {
+        await appointmentService.complete(appointment.id);
+        toast.success(
+          "Appointment completed",
+          `${appointment.patient.firstName} ${appointment.patient.lastName}'s visit marked as completed.`,
+        );
+        await reload();
+      } catch (caught) {
+        toast.error("Unable to complete appointment", messageOf(caught, "Please try again."));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [reload, toast],
+  );
+
+  const handleOpenNote = useCallback((appointment: AppointmentItem) => {
+    setNoteAppointment(appointment);
+    setNoteOpen(true);
   }, []);
 
   const today = new Date().toLocaleDateString("en-IN", {
@@ -101,49 +132,34 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
         <StatTile
-          label="Today's appointments"
+          label="Today's visits"
           value={stats?.todayAppointments ?? 0}
-          hint={
-            loading
-              ? undefined
-              : `${todayByStatus.SCHEDULED} remaining · ${todayByStatus.COMPLETED} completed`
-          }
-          icon={CalendarCheck2}
-          tone="brand"
-          loading={loading}
-        />
-        <StatTile
-          label="Next 7 days"
-          value={stats?.upcomingAppointments ?? 0}
-          hint="scheduled visits"
+          hint={`${todayByStatus.COMPLETED} completed, ${todayByStatus.CANCELLED} cancelled`}
           icon={Clock}
-          tone="info"
           loading={loading}
         />
         <StatTile
-          label={isDoctor ? "My patients" : "Total patients"}
+          label="Upcoming visits"
+          value={stats?.upcomingAppointments ?? 0}
+          hint="Booked from tomorrow onward"
+          icon={CalendarCheck2}
+          loading={loading}
+        />
+        <StatTile
+          label={isDoctor ? "Assigned patients" : "Total patients"}
           value={stats?.totalPatients ?? 0}
-          hint={isDoctor ? "with a visit on your list" : "registered in the clinic"}
+          hint={isDoctor ? "Under your care" : "Registered across clinic"}
           icon={Users}
-          tone="neutral"
           loading={loading}
         />
         <StatTile
-          label={`Completed (${stats?.completedWindowDays ?? 30}d)`}
+          label="Completed visits"
           value={stats?.completedAppointments ?? 0}
-          hint="consultations closed"
+          hint={`${stats?.cancelledAppointments ?? 0} cancelled overall`}
           icon={CheckCircle2}
           tone="success"
-          loading={loading}
-        />
-        <StatTile
-          label={`Cancelled (${stats?.completedWindowDays ?? 30}d)`}
-          value={stats?.cancelledAppointments ?? 0}
-          hint="visits not attended"
-          icon={CalendarX2}
-          tone="danger"
           loading={loading}
         />
       </div>
@@ -216,8 +232,11 @@ export default function DashboardPage() {
           appointments={stats?.todaySchedule ?? []}
           loading={loading}
           compact
-          canManage={false}
+          canManage={isReceptionist}
+          busyId={busyId}
           onView={openDetails}
+          onComplete={handleComplete}
+          onAddNote={handleOpenNote}
           emptyState={
             <EmptyState
               icon={CalendarCheck2}
@@ -251,7 +270,28 @@ export default function DashboardPage() {
         open={detailsOpen}
         canManage={isReceptionist}
         onClose={() => setDetailsOpen(false)}
+        onComplete={handleComplete}
+        onAddNote={handleOpenNote}
       />
+
+      {noteAppointment ? (
+        <ClinicalNoteDialog
+          open={noteOpen}
+          patientId={noteAppointment.patient.id}
+          patientName={`${noteAppointment.patient.firstName} ${noteAppointment.patient.lastName}`}
+          appointments={[noteAppointment]}
+          onClose={() => {
+            setNoteOpen(false);
+            setNoteAppointment(null);
+          }}
+          onSaved={async () => {
+            setNoteOpen(false);
+            setNoteAppointment(null);
+            toast.success("Clinical note recorded", "Your medical note has been saved.");
+            await reload();
+          }}
+        />
+      ) : null}
     </>
   );
 }

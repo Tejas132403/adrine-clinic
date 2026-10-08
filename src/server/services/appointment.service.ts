@@ -279,12 +279,14 @@ export async function cancelAppointment(auth: AuthUser, appointmentId: string): 
 }
 
 export async function completeAppointment(auth: AuthUser, appointmentId: string): Promise<AppointmentItem> {
-  void auth;
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
-    select: { id: true, status: true, appointmentDate: true },
+    select: { id: true, doctorId: true, status: true, appointmentDate: true },
   });
   if (!appointment) throw AppError.notFound("Appointment not found");
+  if (auth.role === "DOCTOR" && appointment.doctorId !== auth.doctorId) {
+    throw AppError.forbidden("Doctors may only mark their own appointments as completed.");
+  }
   if (appointment.status === AppointmentStatus.COMPLETED) {
     throw AppError.conflict("This appointment is already marked as completed.");
   }

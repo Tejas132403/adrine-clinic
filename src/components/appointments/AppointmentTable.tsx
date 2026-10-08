@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, CheckCircle2, Eye, XCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, Eye, FileHeart, XCircle } from "lucide-react";
 import type { AppointmentItem } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 import { AppointmentStatusBadge } from "@/components/ui/Badge";
 import { TableSkeleton } from "@/components/ui/States";
 import { formatDateShort, formatTimeRange } from "@/utils/format";
@@ -20,6 +21,7 @@ type AppointmentTableProps = {
   onReschedule?: (appointment: AppointmentItem) => void;
   onCancel?: (appointment: AppointmentItem) => void;
   onComplete?: (appointment: AppointmentItem) => void;
+  onAddNote?: (appointment: AppointmentItem) => void;
   emptyState: React.ReactNode;
 };
 
@@ -65,8 +67,11 @@ export function AppointmentTable({
   onReschedule,
   onCancel,
   onComplete,
+  onAddNote,
   emptyState,
 }: AppointmentTableProps) {
+  const { user, isDoctor } = useAuth();
+
   if (loading) return <TableSkeleton rows={5} columns={compact ? 4 : 6} />;
 
   if (appointments.length === 0) return <>{emptyState}</>;
@@ -100,7 +105,12 @@ export function AppointmentTable({
         </thead>
         <tbody className="divide-y divide-slate-100">
           {appointments.map((appointment) => {
-            const canAct = canManage && appointment.status === "SCHEDULED";
+            const isDoctorAppointment = isDoctor && appointment.doctor.id === user?.doctorId;
+            const canComplete = (canManage || isDoctorAppointment) && appointment.status === "SCHEDULED";
+            const canAddClinicalNote = isDoctorAppointment && appointment.status !== "CANCELLED";
+            const canReschedule = canManage && appointment.status === "SCHEDULED";
+            const canCancel = canManage && appointment.status === "SCHEDULED";
+
             return (
               <tr key={appointment.id} className="transition-colors hover:bg-surface-subtle">
                 <td className="table-cell whitespace-nowrap pl-4 sm:pl-5">
@@ -150,17 +160,26 @@ export function AppointmentTable({
                     <RowAction label="View details" onClick={() => onView(appointment)}>
                       <Eye className="h-4 w-4" />
                     </RowAction>
-                    {canAct && onComplete ? (
+                    {canComplete && onComplete ? (
                       <RowAction
                         label="Mark as completed"
                         tone="success"
                         disabled={busyId === appointment.id}
                         onClick={() => onComplete(appointment)}
                       >
-                        <CheckCircle2 className="h-4 w-4" />
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                       </RowAction>
                     ) : null}
-                    {canAct && onReschedule ? (
+                    {canAddClinicalNote && onAddNote ? (
+                      <RowAction
+                        label="Add clinical note"
+                        disabled={busyId === appointment.id}
+                        onClick={() => onAddNote(appointment)}
+                      >
+                        <FileHeart className="h-4 w-4 text-brand-600" />
+                      </RowAction>
+                    ) : null}
+                    {canReschedule && onReschedule ? (
                       <RowAction
                         label="Reschedule"
                         disabled={busyId === appointment.id}
@@ -169,7 +188,7 @@ export function AppointmentTable({
                         <CalendarClock className="h-4 w-4" />
                       </RowAction>
                     ) : null}
-                    {canAct && onCancel ? (
+                    {canCancel && onCancel ? (
                       <RowAction
                         label="Cancel appointment"
                         tone="danger"

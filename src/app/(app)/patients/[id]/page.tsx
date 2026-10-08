@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, CalendarPlus, FileHeart, Pencil, Phone, ShieldAlert } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 import { useApiResource } from "@/hooks/useApiResource";
-import { patientService } from "@/services/clinic.service";
+import { appointmentService, patientService } from "@/services/clinic.service";
+import { messageOf } from "@/utils/apiErrors";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DetailItem, Panel, PanelHeader } from "@/components/ui/Panel";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -24,6 +26,7 @@ export default function PatientProfilePage() {
   const params = useParams<{ id: string }>();
   const patientId = params.id;
   const { user, isDoctor, isReceptionist } = useAuth();
+  const toast = useToast();
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentItem | null>(null);
@@ -39,6 +42,17 @@ export default function PatientProfilePage() {
     () => patientService.listNotes(patientId),
     [patientId, user.id],
   );
+
+  const handleComplete = async (appointment: AppointmentItem) => {
+    try {
+      await appointmentService.complete(appointment.id);
+      toast.success("Appointment completed", `${appointment.patient.firstName}'s visit has been marked as completed.`);
+      await reload();
+      await reloadNotes();
+    } catch (caught) {
+      toast.error("Unable to complete appointment", messageOf(caught, "Please try again."));
+    }
+  };
 
   /** Doctors may only write notes against their own, non-cancelled visits. */
   const writableAppointments = useMemo(
@@ -266,6 +280,11 @@ export default function PatientProfilePage() {
         open={detailsOpen}
         canManage={isReceptionist}
         onClose={() => setDetailsOpen(false)}
+        onComplete={handleComplete}
+        onAddNote={() => {
+          setDetailsOpen(false);
+          setNoteOpen(true);
+        }}
       />
 
       <ClinicalNoteDialog
