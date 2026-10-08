@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, Pencil } from "lucide-react";
+import { CalendarPlus, Eye, Pencil } from "lucide-react";
 import type { PatientListItem } from "@/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { PatientStatusBadge } from "@/components/ui/Badge";
@@ -88,12 +88,22 @@ export function PatientTable({
                 <div className="flex items-center justify-end gap-0.5">
                   <Link
                     href={`/patients/${patient.id}`}
-                    title="View patient"
+                    title="View patient profile"
                     aria-label={`View ${patient.firstName} ${patient.lastName}`}
                     className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-ink"
                   >
                     <Eye className="h-4 w-4" />
                   </Link>
+                  {canEdit && patient.status !== "ARCHIVED" ? (
+                    <Link
+                      href={`/appointments?new=1&patientId=${patient.id}`}
+                      title="Book appointment"
+                      aria-label={`Book appointment for ${patient.firstName} ${patient.lastName}`}
+                      className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-700"
+                    >
+                      <CalendarPlus className="h-4 w-4" />
+                    </Link>
+                  ) : null}
                   {canEdit ? (
                     <button
                       type="button"

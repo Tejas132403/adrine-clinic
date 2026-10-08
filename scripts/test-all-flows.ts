@@ -319,8 +319,11 @@ async function run() {
 
   // Test: Overlapping conflict detection
   const [ah, am] = slotA.split(":").map(Number);
-  const overlapStart = `${String(ah).padStart(2, "0")}:${String(am + 15).padStart(2, "0")}`;
-  const overlapEnd = `${String(ah).padStart(2, "0")}:${String(am + 45).padStart(2, "0")}`;
+  const startMins = ah * 60 + am;
+  const oStartMins = startMins + 15;
+  const oEndMins = startMins + 45;
+  const overlapStart = `${String(Math.floor(oStartMins / 60)).padStart(2, "0")}:${String(oStartMins % 60).padStart(2, "0")}`;
+  const overlapEnd = `${String(Math.floor(oEndMins / 60)).padStart(2, "0")}:${String(oEndMins % 60).padStart(2, "0")}`;
 
   const conflictAppt = await api("POST", "/appointments", {
     token: recToken,
