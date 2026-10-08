@@ -186,8 +186,8 @@ export default function PatientProfilePage() {
         <dl className="grid grid-cols-1 gap-x-6 gap-y-4 px-4 py-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-4">
           <DetailItem label="Full name" value={patientName} />
           <DetailItem
-            label="Date of birth"
-            value={`${formatDate(patient.dateOfBirth)} (${formatAge(patient.dateOfBirth)})`}
+            label="Age & Date of birth"
+            value={`${formatAge(patient.dateOfBirth)} · Born ${formatDate(patient.dateOfBirth)}`}
           />
           <DetailItem label="Gender" value={formatGender(patient.gender)} />
           <DetailItem

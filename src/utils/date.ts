@@ -104,6 +104,19 @@ export function ageFromDateOfBirth(dateOfBirth: string, now: Date = new Date()):
   return age;
 }
 
+/** Approximate "yyyy-MM-dd" date of birth computed from age in years. */
+export function dateOfBirthFromAge(age: number, now: Date = new Date()): string {
+  const currentYear = now.getFullYear();
+  const birthYear = currentYear - Math.max(0, Math.floor(age));
+  const month = now.getMonth();
+  const day = now.getDate();
+  const maxDays = new Date(birthYear, month + 1, 0).getDate();
+  const safeDay = Math.min(day, maxDays);
+  const mm = String(month + 1).padStart(2, "0");
+  const dd = String(safeDay).padStart(2, "0");
+  return `${birthYear}-${mm}-${dd}`;
+}
+
 /** ISO timestamp for a (date-only, "HH:mm") pair - used for sorting/labels only. */
 export function combineDateTime(dateOnly: string, time: string): Date | null {
   const date = parseDateOnly(dateOnly);

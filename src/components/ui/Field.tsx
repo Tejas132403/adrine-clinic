@@ -8,7 +8,7 @@ const CONTROL_BASE =
   "w-full rounded-md border bg-white text-sm text-ink placeholder:text-slate-400 transition-colors " +
   "focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25 disabled:bg-slate-50 disabled:text-slate-500";
 
-function controlClasses(error?: string): string {
+export function controlClasses(error?: string): string {
   return cn(CONTROL_BASE, error ? "border-rose-300 focus:border-rose-400 focus:ring-rose-500/20" : "border-slate-300");
 }
 
